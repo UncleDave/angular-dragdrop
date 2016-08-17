@@ -1,4 +1,4 @@
-(function(angular) {
+(function (angular) {
     'use strict';
 
     function isDnDsSupported() {
@@ -6,8 +6,8 @@
     }
 
     function determineEffectAllowed(e) {
-        if(e.originalEvent) {
-          e.dataTransfer = e.originalEvent.dataTransfer;
+        if (e.originalEvent) {
+            e.dataTransfer = e.originalEvent.dataTransfer;
         }
 
         // Chrome doesn't set dropEffect, so we have to work it out ourselves
@@ -28,8 +28,8 @@
 
     var module = angular.module('ang-drag-drop', []);
 
-    module.directive('uiDraggable', ['$parse', '$rootScope', '$dragImage', function($parse, $rootScope, $dragImage) {
-        return function(scope, element, attrs) {
+    module.directive('uiDraggable', ['$parse', '$rootScope', '$dragImage', '$timeout', function ($parse, $rootScope, $dragImage, $timeout) {
+        return function (scope, element, attrs) {
             var isDragHandleUsed = false,
                 dragHandleClass,
                 draggingClass = attrs.draggingClass || 'on-dragging',
@@ -37,16 +37,19 @@
 
             element.attr('draggable', false);
 
-            scope.$watch(attrs.uiDraggable, function(newValue) {
+            scope.$watch(attrs.uiDraggable, function (newValue) {
                 if (newValue) {
                     element.attr('draggable', newValue);
                     element.bind('dragend', dragendHandler);
                     element.bind('dragstart', dragstartHandler);
-                }
-                else {
+                } else {
                     element.removeAttr('draggable');
-                    element.unbind('dragend', dragendHandler);
                     element.unbind('dragstart', dragstartHandler);
+
+                    // Not thrilled about this solution - if the ondrop function changes uiDraggable to false then this function will fire and remove the dragend handler before it runs.
+                    $timeout(function () {
+                        element.unbind('dragend', dragendHandler);
+                    }, 100);
                 }
 
             });
@@ -55,17 +58,17 @@
                 isDragHandleUsed = true;
                 dragHandleClass = attrs.dragHandleClass.trim() || 'drag-handle';
 
-                element.bind('mousedown', function(e) {
+                element.bind('mousedown', function (e) {
                     dragTarget = e.target;
                 });
             }
 
             function dragendHandler(e) {
-                if(e.originalEvent) {
-                  e.dataTransfer = e.originalEvent.dataTransfer;
+                if (e.originalEvent) {
+                    e.dataTransfer = e.originalEvent.dataTransfer;
                 }
 
-                setTimeout(function() {
+                $timeout(function () {
                     element.unbind('$destroy', dragendHandler);
                 }, 0);
                 var sendChannel = attrs.dragChannel || 'defaultchannel';
@@ -76,14 +79,14 @@
                 if (e.dataTransfer && e.dataTransfer.dropEffect !== 'none') {
                     if (attrs.onDropSuccess) {
                         var onDropSuccessFn = $parse(attrs.onDropSuccess);
-                        scope.$evalAsync(function() {
+                        scope.$apply(function () {
                             onDropSuccessFn(scope, {$event: e});
                         });
                     }
-                }else if (e.dataTransfer && e.dataTransfer.dropEffect === 'none'){
+                } else if (e.dataTransfer && e.dataTransfer.dropEffect === 'none') {
                     if (attrs.onDropFailure) {
                         var onDropFailureFn = $parse(attrs.onDropFailure);
-                        scope.$evalAsync(function() {
+                        scope.$apply(function () {
                             onDropFailureFn(scope, {$event: e});
                         });
                     }
@@ -94,13 +97,13 @@
             function setDragElement(e, dragImageElementId) {
                 var dragImageElementFn;
 
-                if(e.originalEvent) {
-                  e.dataTransfer = e.originalEvent.dataTransfer;
+                if (e.originalEvent) {
+                    e.dataTransfer = e.originalEvent.dataTransfer;
                 }
 
                 dragImageElementFn = $parse(dragImageElementId);
 
-                scope.$apply(function() {
+                scope.$apply(function () {
                     var elementId = dragImageElementFn(scope, {$event: e}),
                         dragElement;
 
@@ -119,8 +122,8 @@
             }
 
             function dragstartHandler(e) {
-                if(e.originalEvent) {
-                  e.dataTransfer = e.originalEvent.dataTransfer;
+                if (e.originalEvent) {
+                    e.dataTransfer = e.originalEvent.dataTransfer;
                 }
 
                 var isDragAllowed = !isDragHandleUsed || dragTarget.classList.contains(dragHandleClass);
@@ -143,7 +146,7 @@
                     //If there is a draggable image passed in, then set the image to be dragged.
                     if (dragImage && hasNativeDraggable) {
                         var dragImageFn = $parse(attrs.dragImage);
-                        scope.$apply(function() {
+                        scope.$apply(function () {
                             var dragImageParameters = dragImageFn(scope, {$event: e});
                             if (dragImageParameters) {
                                 if (angular.isString(dragImageParameters)) {
@@ -168,8 +171,7 @@
                     e.dataTransfer.effectAllowed = 'copyMove';
 
                     $rootScope.$broadcast('ANGULAR_DRAG_START', e, sendChannel, transferDataObject);
-                }
-                else {
+                } else {
                     e.preventDefault();
                 }
             }
@@ -177,8 +179,8 @@
     }
     ]);
 
-    module.directive('uiOnDrop', ['$parse', '$rootScope', function($parse, $rootScope) {
-        return function(scope, element, attr) {
+    module.directive('uiOnDrop', ['$parse', '$rootScope', function ($parse, $rootScope) {
+        return function (scope, element, attr) {
             var dragging = 0; //Ref. http://stackoverflow.com/a/10906204
             var dropChannel = attr.dropChannel || 'defaultchannel';
             var dragChannel = '';
@@ -217,7 +219,7 @@
                 }
 
                 var uiOnDragOverFn = $parse(attr.uiOnDragOver);
-                scope.$evalAsync(function() {
+                scope.$apply(function () {
                     uiOnDragOverFn(scope, {$event: e, $channel: dropChannel});
                 });
 
@@ -235,7 +237,7 @@
                 dragging--;
 
                 if (dragging === 0) {
-                    scope.$evalAsync(function() {
+                    scope.$apply(function () {
                         customDragLeaveEvent(scope, {$event: e, $channel: dropChannel});
                     });
                     element.addClass(dragEnterClass);
@@ -243,7 +245,7 @@
                 }
 
                 var uiOnDragLeaveFn = $parse(attr.uiOnDragLeave);
-                scope.$evalAsync(function() {
+                scope.$apply(function () {
                     uiOnDragLeaveFn(scope, {$event: e, $channel: dropChannel});
                 });
             }
@@ -258,7 +260,7 @@
                 }
 
                 if (dragging === 0) {
-                    scope.$evalAsync(function() {
+                    scope.$apply(function () {
                         customDragEnterEvent(scope, {$event: e, $channel: dropChannel});
                     });
                     element.removeClass(dragEnterClass);
@@ -267,7 +269,7 @@
                 dragging++;
 
                 var uiOnDragEnterFn = $parse(attr.uiOnDragEnter);
-                scope.$evalAsync(function() {
+                scope.$apply(function () {
                     uiOnDragEnterFn(scope, {$event: e, $channel: dropChannel});
                 });
 
@@ -275,8 +277,8 @@
             }
 
             function onDrop(e) {
-                if(e.originalEvent) {
-                  e.dataTransfer = e.originalEvent.dataTransfer;
+                if (e.originalEvent) {
+                    e.dataTransfer = e.originalEvent.dataTransfer;
                 }
 
                 if (e.preventDefault) {
@@ -290,22 +292,22 @@
                 sendData = angular.fromJson(sendData);
 
                 var dropOffset = calculateDropOffset(e);
-                
+
                 var position = dropOffset ? {
                     x: dropOffset.x - sendData.offset.x,
                     y: dropOffset.y - sendData.offset.y
                 } : null;
-                
+
                 determineEffectAllowed(e);
 
                 var uiOnDropFn = $parse(attr.uiOnDrop);
-                scope.$evalAsync(function() {
+                scope.$apply(function () {
                     uiOnDropFn(scope, {$data: sendData.data, $event: e, $channel: sendData.channel, $position: position});
                 });
                 element.removeClass(dragEnterClass);
                 dragging = 0;
             }
-            
+
             function isDragChannelAccepted(dragChannel, dropChannel) {
                 if (dropChannel === '*') {
                     return true;
@@ -317,8 +319,8 @@
             }
 
             function preventNativeDnD(e) {
-                if(e.originalEvent) {
-                  e.dataTransfer = e.originalEvent.dataTransfer;
+                if (e.originalEvent) {
+                    e.dataTransfer = e.originalEvent.dataTransfer;
                 }
 
                 if (e.preventDefault) {
@@ -331,7 +333,7 @@
                 return false;
             }
 
-            var deregisterDragStart = $rootScope.$on('ANGULAR_DRAG_START', function(_, e, channel, transferDataObject) {
+            var deregisterDragStart = $rootScope.$on('ANGULAR_DRAG_START', function (_, e, channel, transferDataObject) {
                 dragChannel = channel;
 
                 var valid = true;
@@ -368,8 +370,7 @@
 
             });
 
-
-            var deregisterDragEnd = $rootScope.$on('ANGULAR_DRAG_END', function() {
+            var deregisterDragEnd = $rootScope.$on('ANGULAR_DRAG_END', function () {
                 element.unbind('dragover', onDragOver);
                 element.unbind('dragenter', onDragEnter);
                 element.unbind('dragleave', onDragLeave);
@@ -384,13 +385,13 @@
                 element.unbind('drop', preventNativeDnD);
             });
 
-            scope.$on('$destroy', function() {
+            scope.$on('$destroy', function () {
                 deregisterDragStart();
                 deregisterDragEnd();
             });
 
 
-            attr.$observe('dropChannel', function(value) {
+            attr.$observe('dropChannel', function (value) {
                 if (value) {
                     dropChannel = value;
                 }
@@ -412,7 +413,7 @@
         yOffset: 0
     });
 
-    module.service('$dragImage', ['$dragImageConfig', function(defaultConfig) {
+    module.service('$dragImage', ['$dragImageConfig', function (defaultConfig) {
         var ELLIPSIS = '…';
 
         function fitString(canvas, text, config) {
@@ -427,7 +428,7 @@
             return text + ELLIPSIS;
         }
 
-        this.generate = function(text, options) {
+        this.generate = function (text, options) {
             var config = angular.extend({}, defaultConfig, options || {});
             var el = document.createElement('canvas');
 
